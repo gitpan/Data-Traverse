@@ -1,0 +1,232 @@
+NAME
+    Data::Traverse - Traverse Perl data structures
+
+SYNOPSIS
+     use Data::Traverse;    
+     traverse \&wanted, @items_to_traverse;
+
+     use Data::Traverse;    
+     traversedepth \&wanted, @items_to_traverse;
+    
+     use Data::Traverse;    
+     traverse { wanted => \&process, follow => 1 }, $self;
+    
+DESCRIPTION
+    The above synopsis bears an amazing similarity to File::Find(3pm) and
+    this is not coincidental.
+
+    Data::Traverse(3pm) is for data what File::Find(3pm) is for files. You
+    can use it for rolling your own serialization class, for displaying Perl
+    data structures, for deep copying or comparing, for recursive deletion
+    of data, or ...
+
+    If you are impatient and already familiar with File::Find(3pm), you can
+    skip the following documentation and proceed with "DIFFERENCES TO
+    FILE::FIND".
+
+FUNCTIONS
+    The module exports two functions by default:
+
+    traverse
+          traverse \&wanted, @items;
+          traverse \%options, @items;
+
+        As the name suggests, the function traverses the items in the order
+        they are given. For every object visited, it calls the &wanted
+        subroutine. See "THE WANTED FUNCTION" for details.
+
+    traversedepth
+          traversedepth \&wanted, @items;
+          traversedepth \%options, @items;
+
+        Works exactly like "traverse()" but it first descends deeper into
+        the structure, before visiting the nodes on the current level. If
+        you want to delete visited nodes, then "traversedepth()" is probably
+        your friend.
+
+OPTIONS
+    The first argument to "traverse()" and "traversedepth()" is either a
+    code reference to your &wanted function, or a hash reference describing
+    the operations to be performed for each visited node.
+
+    Here are the possible keys for the hash.
+
+    wanted
+        The value should be a code reference. This code reference is
+        described in "THE WANTED FUNCTION" below.
+
+    bydepth
+        Visits nodes on the current level of recursion only after descending
+        into subnotes. The entry point "traversedepth()" is a shortcut for
+        specifying "{ bydepth => 1 }".
+
+    preprocess
+        The value should be a code reference. This code reference is used to
+        preprocess the current node $Data::Traverse::container. Your
+        preprocessing function is called before the loop that calls the
+        "wanted()" function. It is called with a list of member nodes and is
+        expected to return such a list. The list will contain all sub-nodes,
+        regardless of the value of the option *follow*! The list is normally
+        a shallow copy of the data contained in the original structure. You
+        can therefore safely delete items in it, without affecting the
+        original data. You can use the option *copy*, if you want to change
+        that behavior.
+
+        The behavior is identical for regular arrays and hashes, so you
+        probably want to coerce the list passed as an argument into a hash
+        then. The variable $Data::Traverse::type will contain the string
+        "HASH" if the currently inspected node is a hash.
+
+        You can use the preprocessing function to sort the items contained
+        or to filter out unwanted items. The order is also preserved for
+        hashes!
+
+    preprocess_hash
+        The value should be a code reference. The code is executed right
+        after an eventual *preprocess_hash* handler, but only if the current
+        container is a hash. It is skipped for regular arrays.
+
+        You will usually prefer a *preprocess_hash* handler over a
+        *preprocess* handler if you only want to sort hash keys.
+
+    postprocess
+        The value should be a code reference. It is invoked just before
+        leaving the currently visited node. It is called in void context
+        with no arguments. The variable $Data::Traverse::container points to
+        the currently visited node.
+
+    follow
+        Causes cyclic references to be followed. Normally, the traversal
+        will not descend into nodes that have already been visited. If you
+        set the option *follow* to a truth value, you can change this
+        behavior. Unless you take additional measures, this will always
+        imply an infinite loop!
+
+        Please note that the &wanted function is also called for nodes that
+        have already been visited! The effect of *follow* is to suppress
+        descending into subnodes.
+
+    copy
+        Normally, the &preprocess function is called with a shallow copy of
+        the data. If you set the option *copy* to a false value, the
+        &preprocess function is called with one single argument, a reference
+        to the original data structure. In that case, you also have to
+        return a suitable reference.
+
+        Using this option will result in a slight performance win, and can
+        make it sometimes easier to manipulate the original data.
+
+        What is a shallow copy? Think of a list containing references to
+        hashes:
+
+            my @list = ({ foo => 'bar' }, { foo => 'baz' });
+            my @shallow = @list;
+
+        After this, @shallow will contain a new list, but the items stored
+        in it are exactly identical to the ones stored in the original. In
+        other words, @shallow occupies new memory, whereas both lists
+        contain references to the same memory for the list members.
+
+    All other options are silently ignored.
+
+THE WANTED FUNCTION
+    The &wanted function does whatever verifications you want on each item
+    in the data structure. Note that despite its name, the &wanted function
+    is a generic callback and does not tell Data::Traverse(3pm) if an item
+    is "wanted" or not. In fact, its return value is ignored.
+
+    The wanted function takes no arguments but rather does its work through
+    a collection of variables.
+
+    $_  The currently visited node. Think "file" in terms of
+        File::Find(3pm)!
+
+    $Data::Traverse::container
+        The node containing the currently visited node, either a reference
+        to a hash or an array. Think "directory" in terms of
+        File::Find(3pm)!
+
+    $Data::Traverse::type
+        The base type of the object that $Data::Traverse::container
+        references. This is either "ARRAY" or "HASH".
+
+    $Data::Traverse::seen
+        For references, this will hold the number of times the currently
+        visited node has been visited *before*. The value is consequently
+        set to 0 not 1 on the first visit. For non-references, the value is
+        undefined.
+
+    $Data::Traverse::address
+        For references, this will hold the memory address it points to. It
+        can be used as a unique identifier for the current node. For non-
+        references, the value is undefined.
+
+    These variables should not be modified.
+
+DIFFERENCES TO FILE::FIND
+    The API of Data::Traverse(3pm) tries to mimic the API of File::Find(3pm)
+    to a certain extent. If you are already familiar with File::Find(3pm)
+    you will find it very easy to use Data::Traverse(3pm). Even the
+    documentation for Data::Traverse(3pm) is in parts similar or identcal to
+    that of File::Find(3pm).
+
+  Analogies
+    The equivalent of directories in File::Find(3pm) are the container data
+    types in Data::Traverse(3pm). Container data types are arrays (aka
+    lists) and associative arrays (aka hashes). Files are equivalent to
+    scalars. Wherever File::Find(3pm) passes lists of strings to functions,
+    Data::Traverse(3pm) passes lists of variables.
+
+  Function Names
+    Instead of "find()" and "finddepth()", Data::Traverse(3pm) uses
+    "traverse()" and "traversedepth()", like the smart reader has already
+    guessed after reading the "SYNOPSIS".
+
+  Variables
+    The variable $Data::Traverse::container is vaguely equivalent to
+    $File::Find::dir. All other variables are specific to the corresponding
+    module.
+
+  Wanted Function
+    Like its archetype from File::Find(3pm), the wanted function of
+    Data::Traverse(3pm) is called with $_ set to the currently inspected
+    item.
+
+  Options
+    The option *follow* has the effect that Data::Traverse(3pm) also
+    descends into nodes it has already visited. Unless you take extra
+    measures, this will lead to an infinite loop!
+
+    A number of options are not applicable to data traversion and are
+    ignored by Data::Traverse(3pm). Examples are *follow_fast*,
+    *follow_skip*, *no_chdir*, *untaint*, *untaint_pattern*, and
+    *untaint_skip*. To give truth the honor, all unrecognized options are
+    skipped.
+
+    You may argue, that the options *untaint* and friends would be useful,
+    too, allowing you to recursively untaint data structures. But, hey, that
+    is what Data::Traverse(3pm) is all about. It makes it very easy for you
+    to write that yourself.
+
+COPYING
+    Copyright (C) 2005, Guido Flohr <guido@imperia.net>, all rights
+    reserved.
+
+    This program is free software; you can redistribute it and/or modify it
+    under the terms of the GNU Library General Public License as published
+    by the Free Software Foundation; either version 2, or (at your option)
+    any later version.
+
+    This program is distributed in the hope that it will be useful, but
+    WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Library
+    General Public License for more details.
+
+    You should have received a copy of the GNU Library General Public
+    License along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+    USA.
+
+SEE ALSO
+    Data::Dumper(3pm), Storable(3pm), File::Find(3pm), perl(1)
+
